@@ -1,0 +1,8 @@
+# Runtime dependencies, pinned exactly. Review and refresh the pins on
+# your own schedule before production use.
+fastapi==0.139.0
+uvicorn==0.50.2
+PyJWT==2.13.0
+cryptography==50.0.0
+httpx==0.28.1
+PyYAML==6.0.3
