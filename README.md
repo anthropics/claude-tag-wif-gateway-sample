@@ -16,8 +16,9 @@ identity token to each request in the `Authorization` header as a bearer
 token. This gateway:
 
 1. **Validates** every incoming token — signature (ES256, against the
-   issuer's published JWKS), exact issuer, your registered audience, and
-   expiry. Anything that fails is rejected with a generic 401.
+   published JWKS of the issuer the token names), exact match against
+   the accepted issuers, your registered audience, and expiry. Anything
+   that fails is rejected with a generic 401.
 2. **Maps** the verified claims to a principal in your system, from a
    config file — exact-match on the token subject (preferred), with a
    `slack_channel_id`-based mapping shown as an alternative.
@@ -34,9 +35,9 @@ token. This gateway:
 ## Layout
 
 ```
-gateway/constants.py   Issuer URL, discovery URL, algorithm allowlist, subject prefix
+gateway/constants.py   Default issuer URL, discovery path, algorithm allowlist, subject prefix
 gateway/jwks.py        OIDC discovery -> jwks_uri -> key cache, refresh on unknown kid
-gateway/auth.py        Bearer extraction and the four verify checks from the guide
+gateway/auth.py        Accepted issuer list, bearer extraction, the four verify checks
 gateway/mapping.py     Config-file claims -> principal -> allowed services
 gateway/main.py        App factory, / readiness, /list-services, /services/{name}/{path} proxy
 config.example.yaml    Example mapping config with deliberately fake IDs, plus the
@@ -86,12 +87,15 @@ fails unless you explicitly skip the test.
 checks:
 
 - **Signature** — keys are fetched from the `jwks_uri` named in the
-  discovery document at
-  `https://identity.anthropic.com/agents/.well-known/openid-configuration`.
-  Only ES256 is accepted. On an unknown key id the key cache refreshes
-  once before rejecting, which absorbs key rotation (this is the guide's
-  troubleshooting advice, implemented).
-- **Issuer** — exactly `https://identity.anthropic.com/agents`.
+  discovery document at `<issuer>/.well-known/openid-configuration`,
+  for each accepted issuer (by default only
+  `https://identity.anthropic.com/agents`). The key set is chosen by the
+  token's `iss` claim, so a key published by one issuer never verifies
+  a token that names another. Only ES256 is accepted. On an unknown key
+  id the key cache refreshes once before rejecting, which absorbs key
+  rotation (this is the guide's troubleshooting advice, implemented).
+- **Issuer** — exactly one of the accepted issuers; see "Accepted
+  issuers" below.
 - **Audience** — the value you registered. On the wire the audience claim
   is a JSON array with one element, which is standard JWT; the code uses
   the library's audience check rather than comparing raw claim text, as
@@ -102,7 +106,38 @@ The test suite (`tests/`) is the guide's step 2.3 made runnable: it
 mints tokens with locally generated throwaway keys and verifies the
 gateway rejects wrong-audience, bad-signature, and expired tokens (plus
 wrong issuer, `alg=none`, unknown key id, and missing claims) and
-accepts a valid token against a local JWKS. Everything runs offline.
+accepts a valid token against a local JWKS. `tests/test_issuers.py`
+covers the accepted issuer list: the default, one explicit issuer, two
+issuers verified with their own keys, a token naming an issuer that is
+not listed, and a token signed with another issuer's key. Everything
+runs offline.
+
+#### Accepted issuers
+
+By default the gateway accepts tokens from
+`https://identity.anthropic.com/agents` only. To accept a different
+issuer, set `CLAUDE_TAG_ISSUER`. To accept several, set
+`CLAUDE_TAG_ISSUERS` to a comma-separated list; it takes precedence
+over the singular variable:
+
+```bash
+CLAUDE_TAG_ISSUERS="https://identity.anthropic.com/claude-tag,https://identity.anthropic.com/agents" \
+  .venv/bin/python -m uvicorn gateway.main:create_app --factory --port 8000
+```
+
+Every entry must be an https URL with no trailing slash, and a token's
+`iss` claim must equal an entry exactly. The gateway keeps a separate
+key set per issuer, fetched from that issuer's own discovery document,
+and refuses to start on a malformed list. With Docker, pass the variable
+with `-e CLAUDE_TAG_ISSUERS=...` on the `docker run` line.
+
+**Issuer transition.** Claude Tag tokens moved from
+`https://identity.anthropic.com/claude-tag` to
+`https://identity.anthropic.com/agents` on September 4, 2026, and the
+previous issuer's keys remain published for a transition period. If
+your gateway may still receive tokens from the previous issuer, list
+both as above. Once it no longer does, unset the variable so that only
+`https://identity.anthropic.com/agents` is accepted.
 
 ### Step 3 — Map subjects to principals
 
@@ -185,6 +220,10 @@ still enables it after the review in Step 4.
   service, or a missing downstream credential all reject the request.
 - ES256 only; `alg=none` and algorithm-confusion attempts are rejected
   before key lookup.
+- Signing keys are kept per issuer and chosen by the token's `iss`
+  claim, which must exactly equal an accepted issuer; a token naming any
+  other issuer is rejected before key lookup, and a token is never
+  checked against another issuer's keys.
 - Error responses are generic and never echo token contents.
 - FastAPI's interactive documentation and OpenAPI routes (`/docs`,
   `/redoc`, `/openapi.json`) are turned off, so the gateway does not

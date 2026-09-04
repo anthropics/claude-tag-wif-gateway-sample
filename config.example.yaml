@@ -10,6 +10,11 @@
 # to be the gateway's https root URL, with no path or query string.
 audience: "https://gateway.example.com"
 
+# The accepted token issuers are not set in this file. The gateway
+# accepts https://identity.anthropic.com/agents unless the environment
+# variable CLAUDE_TAG_ISSUERS lists others or CLAUDE_TAG_ISSUER names
+# one; see the README.
+
 # Exact match on the full token subject. The onboarding guide recommends
 # this form.
 principals:

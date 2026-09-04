@@ -151,7 +151,11 @@ def harness(tmp_path, monkeypatch):
     jwks_cache = JWKSCache(
         http_client, OIDC_DISCOVERY_URL, min_refresh_interval_seconds=0
     )
-    app = create_app(str(config_path), http_client=http_client, jwks_cache=jwks_cache)
+    app = create_app(
+        str(config_path),
+        http_client=http_client,
+        jwks_cache={CLAUDE_TAG_ISSUER: jwks_cache},
+    )
     # backend= is pinned explicitly: asyncio is the library default, and
     # the right choice over trio here because the gateway uses asyncio
     # primitives (asyncio.Lock in the JWKS cache).

@@ -102,6 +102,18 @@ def test_rejects_garbage_token(harness):
     assert harness.get("/list-services", token="not.a.jwt").status_code == 401
 
 
+def test_rejects_deeply_nested_header_and_payload(harness):
+    import base64
+
+    def segment(raw: bytes) -> str:
+        return base64.urlsafe_b64encode(raw).rstrip(b"=").decode()
+
+    nested = segment(b"[" * 100_000)
+    header = segment(b'{"alg":"ES256","kid":"' + TEST_KID.encode() + b'"}')
+    for token in (f"{nested}.{header}.sig", f"{header}.{nested}.sig"):
+        assert harness.get("/list-services", token=token).status_code == 401
+
+
 def test_rejects_missing_subject(harness):
     token = harness.mint(sub=None)
     assert harness.get("/list-services", token=token).status_code == 401
