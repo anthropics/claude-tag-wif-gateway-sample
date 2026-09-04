@@ -1,14 +1,14 @@
 # Copyright 2026 Anthropic PBC
 # SPDX-License-Identifier: Apache-2.0
 
-# Claude Tag identity federation private beta sample code.
+# Claude Tag identity federation public beta sample code.
 # This is a reference implementation, not a production service.
 # Review it against your own security requirements before any
 # production use.
 
 """Token validation for the Claude Tag sample gateway.
 
-Every check the onboarding guide lists runs here. Signature against the
+Every check the documentation lists runs here. Signature against the
 JWKS of the issuer the token names, exact issuer match against the
 accepted list, the registered audience, and expiry. Any failure produces
 a generic 401 so responses never leak which check failed or what the
@@ -124,7 +124,7 @@ async def verify_request(request: Request) -> dict:
             issuer=issuer,
             # On the wire the audience claim is a JSON array with one
             # element, which is standard JWT. The library check below
-            # handles both that form and a bare string, as the guide
+            # handles both that form and a bare string, as the documentation
             # recommends, instead of comparing raw claim text.
             audience=request.app.state.config.audience,
             leeway=0,

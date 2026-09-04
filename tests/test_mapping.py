@@ -1,7 +1,7 @@
 # Copyright 2026 Anthropic PBC
 # SPDX-License-Identifier: Apache-2.0
 
-# Claude Tag identity federation private beta sample code.
+# Claude Tag identity federation public beta sample code.
 # This is a reference implementation, not a production service.
 # Review it against your own security requirements before any
 # production use.

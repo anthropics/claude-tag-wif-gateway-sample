@@ -3,8 +3,9 @@
 # Copy this file to config.yaml and replace every value with your own.
 # The IDs below are deliberately implausible placeholders, except the
 # reserved registration-test control agent, which is the same for every
-# organization. Your Anthropic contact provides your real organization
-# ID and agent IDs.
+# organization. Your organization ID is the org_ segment of the Subject
+# prefix shown in the Connect a gateway dialog; an agent's ID appears in
+# this gateway's authorization log after the agent's first request.
 
 # The audience value you registered. The registration test requires it
 # to be the gateway's https root URL, with no path or query string.
@@ -15,8 +16,8 @@ audience: "https://gateway.example.com"
 # variable CLAUDE_TAG_ISSUERS lists others or CLAUDE_TAG_ISSUER names
 # one; see the README.
 
-# Exact match on the full token subject. The onboarding guide recommends
-# this form.
+# Exact match on the full token subject. This is the recommended form
+# whenever your use case allows it.
 principals:
     - subject: "wimse://identity.anthropic.com/org/org_0000000000000000000EXAMPLE/agent/cagt_0000000000000000000EXAMPLE"
       principal: "example-agent"

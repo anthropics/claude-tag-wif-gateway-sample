@@ -1,13 +1,13 @@
 # Claude Tag Custom Gateway — Sample Implementation
 
 **Sample code. Not maintained and not accepting contributions.** This
-is a reference implementation of the "custom gateway" described in the
-Claude Tag Identity Federation onboarding guide (Chapter 2, "Custom
-endpoint — direct token presentation"). The Claude Tag identity
-federation feature is currently in private beta; your Anthropic contact
-can tell you whether it is available to your organization. This code is
-meant to be read, adapted, and reviewed against your own security
-requirements before any production use. It is not a supported product.
+is a reference implementation of the gateway connection described in
+the Claude Tag documentation under Federated cloud access, "Connect a
+gateway". Federated cloud access is in public beta; an admin of your
+Claude organization connects gateways in Claude Tag admin settings, with
+no Anthropic involvement. This code is meant to be read, adapted, and
+reviewed against your own security requirements before any production
+use. It is not a supported product.
 
 ## What it does
 
@@ -69,27 +69,26 @@ docker run -p 8000:8000 \
   claude-tag-gateway-sample
 ```
 
-## How this maps to the onboarding guide
+## How this maps to the documentation
 
-Follow the guide's Chapter 2 steps with this code side by side.
+Follow the "Connect a gateway" page with this code side by side.
 
-### Step 1 — Choose an audience value and register your endpoint
+### Step 1 — Choose your audience value
 
-Pick your audience string (printable ASCII, no spaces, at most 256 bytes;
-values used for cloud token exchange such as `sts.amazonaws.com` are
-reserved). Put it in `config.yaml` under `audience`, and send it with
-your endpoint URL to your Anthropic contact for registration. If your
-organization has access to self-serve registration, you register there
-instead and can run the registration test described under "The
-readiness route and the registration test" below. If you plan to run
-that test, use your gateway's https root URL, with no path or query
-string, as the audience: with any other audience the registration call
-fails unless you explicitly skip the test.
+The audience is your gateway's public address: `https://` plus the host
+name in lowercase, on the standard port, with no path, query string or
+trailing slash, for example `https://gateway.example.com`. The console
+accepts nothing else when you connect the gateway, and it is the exact
+value every token's `aud` claim will carry. Put it in `config.yaml`
+under `audience`. You register it yourself in Step 4; the console then
+runs the registration test described under "The readiness route and
+the registration test" below, unless you skip it with a recorded
+reason.
 
 ### Step 2 — Validate tokens at your endpoint
 
-`gateway/auth.py` and `gateway/jwks.py` implement the guide's four
-checks:
+`gateway/auth.py` and `gateway/jwks.py` implement the four checks the
+documentation requires:
 
 - **Signature** — keys are fetched from the `jwks_uri` named in the
   discovery document at `<issuer>/.well-known/openid-configuration`,
@@ -98,16 +97,17 @@ checks:
   token's `iss` claim, so a key published by one issuer never verifies
   a token that names another. Only ES256 is accepted. On an unknown key
   id the key cache refreshes once before rejecting, which absorbs key
-  rotation (this is the guide's troubleshooting advice, implemented).
+  rotation (the documentation's troubleshooting advice, implemented).
 - **Issuer** — exactly one of the accepted issuers; see "Accepted
   issuers" below.
 - **Audience** — the value you registered. On the wire the audience claim
   is a JSON array with one element, which is standard JWT; the code uses
   the library's audience check rather than comparing raw claim text, as
-  the guide recommends.
+  the documentation recommends.
 - **Expiry** — tokens live 10 minutes; no leeway is granted.
 
-The test suite (`tests/`) is the guide's step 2.3 made runnable: it
+The test suite (`tests/`) makes the documentation's verification list
+runnable: it
 mints tokens with locally generated throwaway keys and verifies the
 gateway rejects wrong-audience, bad-signature, and expired tokens (plus
 wrong issuer, `alg=none`, unknown key id, and missing claims) and
@@ -148,9 +148,15 @@ both as above. Once it no longer does, unset the variable so that only
 
 The token subject identifies one agent:
 `wimse://identity.anthropic.com/org/<YOUR_ORG_ID>/agent/<AGENT_ID>`.
-Your Anthropic contact provides your organization ID (starts with
-`org_`) and each agent's ID (starts with `cagt_`). Check the subject
-in this order:
+The **Connect a gateway** dialog in Claude Tag admin settings shows your
+organization's **Subject prefix**,
+`wimse://identity.anthropic.com/org/<YOUR_ORG_ID>/agent/` (your
+organization ID is the `org_` segment), and the **Control subject** the
+registration test uses. The console does not list agent IDs (`cagt_`):
+this gateway's authorization log records the verified subject of every
+request, including requests it rejects as unmapped, so you can read an
+agent's full subject there after its first call. Check the subject in
+this order:
 
 1. **Pin the exact agent subjects** when your use case allows it. This
    is the default and the strongest check: put exact-match entries in
@@ -192,21 +198,28 @@ pin. A token for an agent in any other organization does not match the
 prefix and is rejected with 403, which is what the registration test's
 wrong-subject probe checks.
 
-**Channel lifecycle caveat (from the guide):** an agent's identity is
-tied to its channel. Deleting and recreating a channel — even with the
-same name — creates a new agent with a new subject, and pinned mappings
-stop matching with no other warning. If that happens, get the new subject
-from your Anthropic contact and update `config.yaml`.
+**Channel lifecycle caveat:** an agent's identity is tied to its
+channel. Deleting and recreating a channel — even with the same name —
+creates a new agent with a new subject, and pinned mappings stop
+matching with no other warning. If that happens, read the new subject
+from the authorization log (the recreated channel's first request is
+logged as `unmapped_subject`) and update `config.yaml`. An organization
+mapping keeps working across recreation.
 
-### Step 4 — Submit for review and verify end to end (required)
+### Step 4 — Connect the gateway in the console and verify end to end
 
-Anthropic reviews every connection configuration in this beta before
-enabling it. Send your Anthropic contact: your audience value, where
-validation happens, and how subjects map to permissions. The connection
-is not enabled until that review is done. After enablement, trigger a
-test action from the agent's channel and check your gateway's logs —
-token accepted, subject mapped to the expected principal — and that a
-request with a different audience is rejected.
+In Claude Tag admin settings, open **Federated cloud access**, click
+**Connect a gateway**, enter the audience URL from Step 1, confirm that
+your gateway checks each token's subject, and run the connection check:
+it sends the two probe requests described under "The readiness route
+and the registration test" below, and both must get the expected
+answer. Then add the gateway to an Access bundle attached to the scope
+of the channels that should use it. Anthropic does not review your
+configuration; the connection check and your own verification are the
+safeguards. Finally, trigger a test action from an agent's channel and
+check the gateway's logs — token accepted, subject mapped to the
+expected principal — and that a token with a different audience is
+rejected.
 
 ## The discovery route
 
@@ -216,8 +229,7 @@ how to use it. One useful pattern, served by this sample, is
 principal may use. Mention the route in the identity profile's system
 prompt addendum (for example, "call GET /list-services to see what's
 available") so the agent reads it at runtime. An OpenAPI spec is an
-equally valid shape — see the guide for the current discussion of
-discoverability.
+equally valid shape.
 
 ## The readiness route and the registration test
 

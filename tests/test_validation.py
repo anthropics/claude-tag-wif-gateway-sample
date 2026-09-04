@@ -1,14 +1,14 @@
 # Copyright 2026 Anthropic PBC
 # SPDX-License-Identifier: Apache-2.0
 
-# Claude Tag identity federation private beta sample code.
+# Claude Tag identity federation public beta sample code.
 # This is a reference implementation, not a production service.
 # Review it against your own security requirements before any
 # production use.
 
-"""Token validation tests mirroring the onboarding guide's verify list.
+"""Token validation tests mirroring the documentation's verify list.
 
-The guide says to verify that the endpoint rejects a token with a wrong
+The documentation says to verify that the endpoint rejects a token with a wrong
 audience, a bad signature, or an expired timestamp, and accepts a valid
 token against a local JWKS. Each case below is one of those checks plus
 the adjacent failure modes a validator must also close.

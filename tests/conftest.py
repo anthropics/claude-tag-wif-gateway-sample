@@ -1,7 +1,7 @@
 # Copyright 2026 Anthropic PBC
 # SPDX-License-Identifier: Apache-2.0
 
-# Claude Tag identity federation private beta sample code.
+# Claude Tag identity federation public beta sample code.
 # This is a reference implementation, not a production service.
 # Review it against your own security requirements before any
 # production use.
@@ -9,9 +9,9 @@
 """Test harness for the Claude Tag sample gateway.
 
 The harness generates throwaway ES256 keys locally and serves them from
-a mocked JWKS endpoint, so every verify step from the onboarding guide
+a mocked JWKS endpoint, so every verify step from the documentation
 can be exercised with no network access and no dependency on Anthropic
-infrastructure. This mirrors the guide's suggestion to mint test tokens
+infrastructure. This mirrors the documentation's suggestion to mint test tokens
 with a throwaway key of your own.
 """
 
