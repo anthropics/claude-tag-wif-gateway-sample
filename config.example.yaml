@@ -41,15 +41,16 @@ principals:
 #       principal: "any-agent-in-my-organization"
 #       allowed_services: ["example-api"]
 
-# Mapping by the slack_channel_id claim instead of the subject; the
-# channel_id key below is the channel ID to match against that claim.
-# Any of your agents posting from this channel resolves to this
-# principal, which is broader than a subject pin. Prefer subject pins
-# unless you need this.
-channel_principals:
-    - channel_id: "C0123456789"
-      principal: "support-channel-agent"
-      allowed_services: ["example-api"]
+# Optional: mapping by the slack_channel_id claim instead of the
+# subject; the channel_id key below is the channel ID to match against
+# that claim. A channel mapping accepts a matching channel ID from ANY
+# organization, so it is not a subject check: leave it commented out if
+# you select the console's subject-check checkbox, and prefer subject
+# pins or the organization mapping above. Uncomment only if you need it.
+# channel_principals:
+#     - channel_id: "C0123456789"
+#       principal: "support-channel-agent"
+#       allowed_services: ["example-api"]
 
 # Downstream services reachable through the proxy route. The credential
 # is read from the named environment variable at request time and never

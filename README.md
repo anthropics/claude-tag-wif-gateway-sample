@@ -170,8 +170,8 @@ this order:
    together with the `tenant` claim (your organization ID). This sample
    does not implement the `tenant` check.
 
-A mapping keyed on the token's `slack_channel_id` claim is also shown
-under `channel_principals` — a custom endpoint can authorize on any
+A mapping keyed on the token's `slack_channel_id` claim is also shown,
+commented out, under `channel_principals` — a custom endpoint can authorize on any
 claim because it verifies the full token itself, but a channel mapping
 checks neither the agent nor the organization, so it is the weakest
 option; prefer the subject checks above. The claim is present only when
@@ -217,9 +217,10 @@ address**, select the **This gateway checks that each token's subject
 belongs to your organization** checkbox, and click **Run check and
 connect**. Select that checkbox only if the gateway rejects every
 subject outside your organization: this sample does so through
-`principals` and `organization_principals`, so remove any
-`channel_principals` entry first, because that mapping accepts a
-matching channel ID from any organization. The check sends the two
+`principals` and `organization_principals`; leave the optional
+`channel_principals` mapping commented out (as the example config ships
+it), because that mapping accepts a matching channel ID from any
+organization. The check sends the two
 probe requests described under "The readiness route and the connection
 check" below, and both must get the expected answer.
 
