@@ -36,9 +36,23 @@ TEST_CREDENTIAL = "test-downstream-credential"
 
 # These IDs are deliberately implausible example values that will not
 # match any real organization or agent.
-MAPPED_SUBJECT = "wimse://identity.anthropic.com/org/org_0000000000000000000EXAMPLE/agent/cagt_0000000000000000000EXAMPLE"
-UNMAPPED_SUBJECT = "wimse://identity.anthropic.com/org/org_0000000000000000000EXAMPLE/agent/cagt_0000000000000000001EXAMPLE"
+ORGANIZATION_PREFIX = "wimse://identity.anthropic.com/org/org_0000000000000000000EXAMPLE/agent/"
+MAPPED_SUBJECT = ORGANIZATION_PREFIX + "cagt_0000000000000000000EXAMPLE"
+UNMAPPED_SUBJECT = ORGANIZATION_PREFIX + "cagt_0000000000000000001EXAMPLE"
+CONTROL_SUBJECT = ORGANIZATION_PREFIX + "cagt_01YcVfxkQb6JRzqk5kF2tNLh"
 MAPPED_CHANNEL = "C0123456789"
+
+TEST_SERVICES = f"""
+services:
+  example-api:
+    description: "Example downstream API for tests."
+    upstream_base_url: "{TEST_UPSTREAM}"
+    credential_env: "EXAMPLE_API_TOKEN"
+  other-api:
+    description: "A service the test agent is not allowed to use."
+    upstream_base_url: "{TEST_UPSTREAM}"
+    credential_env: "OTHER_API_TOKEN"
+"""
 
 TEST_CONFIG = f"""
 audience: "{TEST_AUDIENCE}"
@@ -50,16 +64,26 @@ channel_principals:
   - channel_id: "{MAPPED_CHANNEL}"
     principal: "channel-agent"
     allowed_services: ["example-api"]
-services:
-  example-api:
-    description: "Example downstream API for tests."
-    upstream_base_url: "{TEST_UPSTREAM}"
-    credential_env: "EXAMPLE_API_TOKEN"
-  other-api:
-    description: "A service the test agent is not allowed to use."
-    upstream_base_url: "{TEST_UPSTREAM}"
-    credential_env: "OTHER_API_TOKEN"
-"""
+{TEST_SERVICES}"""
+
+TEST_CONFIG_WITH_ORGANIZATION = f"""
+audience: "{TEST_AUDIENCE}"
+principals:
+  - subject: "{MAPPED_SUBJECT}"
+    principal: "test-agent"
+    allowed_services: ["example-api"]
+  - subject: "{CONTROL_SUBJECT}"
+    principal: "registration-test-control"
+    allowed_services: []
+organization_principals:
+  - subject_prefix: "{ORGANIZATION_PREFIX}"
+    principal: "organization-agent"
+    allowed_services: ["other-api"]
+channel_principals:
+  - channel_id: "{MAPPED_CHANNEL}"
+    principal: "channel-agent"
+    allowed_services: ["example-api"]
+{TEST_SERVICES}"""
 
 
 def _b64url(data: bytes) -> str:
@@ -121,9 +145,18 @@ class GatewayHarness:
 
 @pytest.fixture
 def harness(tmp_path, monkeypatch):
+    yield from _run_harness(tmp_path, monkeypatch, TEST_CONFIG)
+
+
+@pytest.fixture
+def organization_harness(tmp_path, monkeypatch):
+    yield from _run_harness(tmp_path, monkeypatch, TEST_CONFIG_WITH_ORGANIZATION)
+
+
+def _run_harness(tmp_path, monkeypatch, config_text):
     monkeypatch.setenv("EXAMPLE_API_TOKEN", TEST_CREDENTIAL)
     config_path = tmp_path / "config.yaml"
-    config_path.write_text(TEST_CONFIG)
+    config_path.write_text(config_text)
 
     signing_key = make_es256_key()
     jwks_state = {"keys": [public_jwk(signing_key, TEST_KID)]}

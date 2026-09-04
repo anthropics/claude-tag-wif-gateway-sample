@@ -28,3 +28,15 @@ ALLOWED_ALGORITHMS = ["ES256"]
 # Scheme of every Claude Tag subject: the Workload Identifier URI form
 # defined by the IETF WIMSE working group (draft-ietf-wimse-identifier).
 AGENT_SUBJECT_PREFIX = "wimse://"
+
+# Every subject has the form
+# wimse://identity.anthropic.com/org/<organization id>/agent/<agent id>.
+# An organization's subject prefix is everything up to and including
+# "/agent/".
+ORGANIZATION_SUBJECT_PREFIX = AGENT_SUBJECT_PREFIX + "identity.anthropic.com/org/"
+AGENT_PATH_SEGMENT = "/agent/"
+
+# The reserved agent id the registration test mints its control token
+# for, the same in every organization. It is authorized only through an
+# exact subject pin, never through an organization prefix.
+REGISTRATION_TEST_AGENT_ID = "cagt_01YcVfxkQb6JRzqk5kF2tNLh"

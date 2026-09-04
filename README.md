@@ -20,7 +20,8 @@ token. This gateway:
    the accepted issuers, your registered audience, and expiry. Anything
    that fails is rejected with a generic 401.
 2. **Maps** the verified claims to a principal in your system, from a
-   config file — exact-match on the token subject (preferred), with a
+   config file — exact-match on the token subject (preferred), an
+   optional organization-wide mapping by subject prefix, and a
    `slack_channel_id`-based mapping shown as an alternative.
 3. **Serves a discovery route** (`GET /list-services`) so the agent can
    learn at runtime what this gateway offers — one useful pattern for
@@ -31,14 +32,18 @@ token. This gateway:
    (`/services/{name}/...`), injecting a downstream credential from an
    environment variable. The Claude Tag token itself is never forwarded
    downstream.
+6. **Logs every authorization decision** as one JSON line with the
+   verified subject, so you can read an agent's full subject from the
+   log after its first request. The token itself is never logged.
 
 ## Layout
 
 ```
-gateway/constants.py   Default issuer URL, discovery path, algorithm allowlist, subject prefix
+gateway/constants.py   Default issuer URL, discovery path, algorithm allowlist, subject prefixes, control agent id
 gateway/jwks.py        OIDC discovery -> jwks_uri -> key cache, refresh on unknown kid
 gateway/auth.py        Accepted issuer list, bearer extraction, the four verify checks
 gateway/mapping.py     Config-file claims -> principal -> allowed services
+gateway/access_log.py  One JSON line per authorization decision, never the token
 gateway/main.py        App factory, / readiness, /list-services, /services/{name}/{path} proxy
 config.example.yaml    Example mapping config with deliberately fake IDs, plus the
                        reserved registration-test control subject
@@ -144,14 +149,48 @@ both as above. Once it no longer does, unset the variable so that only
 The token subject identifies one agent:
 `wimse://identity.anthropic.com/org/<YOUR_ORG_ID>/agent/<AGENT_ID>`.
 Your Anthropic contact provides your organization ID (starts with
-`org_`) and each agent's ID (starts with `cagt_`). Put exact-match
-entries in `config.yaml` under `principals`. A mapping keyed on the
-token's `slack_channel_id` claim is shown under `channel_principals` — a
-custom endpoint can authorize on any claim because it verifies the full
-token itself, but a channel mapping is broader than a subject pin, so
-prefer subject pins. The claim is present only when Claude is acting in
-one Slack channel; a token for a workspace-wide request has none, and
-that token matches no `channel_principals` entry.
+`org_`) and each agent's ID (starts with `cagt_`). Check the subject
+in this order:
+
+1. **Pin the exact agent subjects** when your use case allows it. This
+   is the default and the strongest check: put exact-match entries in
+   `config.yaml` under `principals`. You update an entry when its
+   channel is recreated (see the caveat below).
+2. **Otherwise, at minimum require your organization.** Either require
+   your organization's prefix on `sub`, which is the opt-in
+   `organization_principals` entry described below, or check `iss`
+   together with the `tenant` claim (your organization ID). This sample
+   does not implement the `tenant` check.
+
+A mapping keyed on the token's `slack_channel_id` claim is also shown
+under `channel_principals` — a custom endpoint can authorize on any
+claim because it verifies the full token itself, but a channel mapping
+checks neither the agent nor the organization, so it is the weakest
+option; prefer the subject checks above. The claim is present only when
+Claude is acting in one Slack channel; a token for a workspace-wide
+request has none, and that token matches no `channel_principals` entry.
+
+If you do not know an agent's ID yet, its first request is rejected with
+403 and the gateway logs the full subject (see "Authorization log"
+below); copy it into `config.yaml`.
+
+To give every agent in your organization the same access without
+pinning each one, add an `organization_principals` entry keyed by your
+organization's subject prefix,
+`wimse://identity.anthropic.com/org/<YOUR_ORG_ID>/agent/` — everything
+in your agents' subjects up to and including `/agent/` (shown as
+"Subject prefix" where you register the gateway). The example config has
+a commented-out entry. The prefix must be complete and end in
+`/agent/`; the gateway refuses to start on any other value, so one
+organization ID can never match another that merely starts with the
+same characters. Exact pins take precedence over the organization entry,
+so a pinned agent keeps its own services; the organization entry in turn
+takes precedence over `channel_principals`. The reserved
+registration-test control agent is never matched by an organization
+entry, so it cannot inherit your organization's services; keep its exact
+pin. A token for an agent in any other organization does not match the
+prefix and is rejected with 403, which is what the registration test's
+wrong-subject probe checks.
 
 **Channel lifecycle caveat (from the guide):** an agent's identity is
 tied to its channel. Deleting and recreating a channel — even with the
@@ -209,10 +248,29 @@ what answers it, but two configuration points are also required:
   `wimse://identity.anthropic.com/org/<YOUR_ORG_ID>/agent/cagt_01YcVfxkQb6JRzqk5kF2tNLh`
   (the same organization ID as your other subjects). Without this entry
   the control gets 403 and the test reports that the gateway rejects
-  everything.
+  everything. An `organization_principals` entry never matches the
+  reserved control agent, so this exact pin is still required when you
+  use one.
 
 Passing this test does not enable the connection by itself; Anthropic
 still enables it after the review in Step 4.
+
+## Authorization log
+
+Every authorization decision writes one JSON line to standard error
+through Python's `logging` module, logger name `gateway.access`.
+Accepted requests log at INFO with the verified subject and principal;
+rejections log at WARNING with a reason: `invalid_token` (missing,
+malformed, or failed verification; no subject is logged, because an
+unverified token's claims cannot be trusted), `verification_unavailable`
+(the issuer's key set could not be fetched, so the response was 503),
+`unmapped_subject` (with the verified subject, so you can pin it), or
+`service_not_allowed` (with the subject, principal, and service; this
+line follows the request's accepted line, because the token and mapping
+passed before the service check failed). The token is never written. If
+your process already configures logging, the gateway adds no handler of
+its own; its lines go through your handlers, with the `gateway.access`
+logger set to INFO.
 
 ## Security properties of this sample
 
@@ -224,7 +282,8 @@ still enables it after the review in Step 4.
   claim, which must exactly equal an accepted issuer; a token naming any
   other issuer is rejected before key lookup, and a token is never
   checked against another issuer's keys.
-- Error responses are generic and never echo token contents.
+- Error responses are generic and never echo token contents, and the
+  authorization log records subjects only from tokens that verified.
 - FastAPI's interactive documentation and OpenAPI routes (`/docs`,
   `/redoc`, `/openapi.json`) are turned off, so the gateway does not
   publish its route list.
@@ -262,9 +321,13 @@ still enables it after the review in Step 4.
 Known gaps, deliberately accepted in this sample; review them against
 your own requirements before any production use:
 
-- The optional channel-based agent mapping does not also check the
-  agent's organization; the audience check is the only
-  cross-organization barrier on that path. Prefer exact subject pins.
+- The optional channel-based agent mapping does not check the agent's
+  organization. The cross-organization barrier in this gateway is the
+  subject check, a pin on your own organization in `sub` (an exact pin
+  or an `organization_principals` entry); the audience check is not
+  one, because tokens minted for another organization can carry your
+  gateway's audience. A channel mapping bypasses that barrier, so prefer
+  subject pins.
 - The key-set URL named by the issuer's discovery document is fetched
   wherever it points (any HTTPS host); it is not pinned to the
   issuer's own host.
@@ -274,8 +337,8 @@ your own requirements before any production use:
 
 ## Before production
 
-At minimum: terminate TLS in front of the gateway, add rate limiting and
-structured logging (log the subject and decision, never the token), cap
+At minimum: terminate TLS in front of the gateway, add rate limiting, ship
+the authorization log somewhere you can search it, cap
 how long previously fetched signing keys may keep being served when JWKS
 refreshes fail repeatedly (this sample serves its last good key set
 until a refresh succeeds), pin your container base image by digest, consider hash-pinned dependency
@@ -285,5 +348,8 @@ run your own security review. The subject prefix (`wimse://`) is the Workload
 Identifier URI form defined by the IETF WIMSE working group
 (draft-ietf-wimse-identifier) — it is a single named constant in
 `gateway/constants.py`. The gateway checks that scheme, and a subject pin
-matches the full identifier exactly, never by prefix, as that draft specifies.
-The optional channel mapping in Step 3 does not match the identifier at all.
+matches the full identifier exactly, as that draft specifies. The
+optional `organization_principals` mapping is a deliberate policy
+exception to that: it matches one organization's complete prefix,
+anchored at `/agent/`. The optional channel mapping in Step 3 does not
+match the identifier at all.

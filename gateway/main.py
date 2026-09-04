@@ -35,6 +35,7 @@ from urllib.parse import quote, unquote
 import httpx
 from fastapi import Depends, FastAPI, HTTPException, Request, Response
 
+from gateway import access_log
 from gateway.auth import accepted_issuers, verify_request
 from gateway.constants import OIDC_DISCOVERY_PATH
 from gateway.jwks import JWKSCache
@@ -117,14 +118,30 @@ def sanitize_downstream_path(downstream_path: str) -> str | None:
 
 
 async def _authorize(request: Request) -> Principal:
-    claims = await verify_request(request)
+    try:
+        claims = await verify_request(request)
+    except HTTPException as error:
+        # An unverified token's claims cannot be trusted, so none of them
+        # are logged.
+        reason = (
+            "verification_unavailable" if error.status_code == 503 else "invalid_token"
+        )
+        access_log.record(request, "rejected", reason=reason)
+        raise
     principal = request.app.state.config.resolve_principal(claims)
     if principal is None:
         # The token is genuine but this agent has no mapping, so the
         # request is forbidden rather than unauthorized.
+        access_log.record(
+            request, "rejected", reason="unmapped_subject", subject=claims["sub"]
+        )
         raise HTTPException(
             status_code=403, detail="agent is not mapped to a principal"
         )
+    access_log.record(
+        request, "accepted", subject=claims["sub"], principal=principal.name
+    )
+    request.state.subject = claims["sub"]
     return principal
 
 
@@ -146,6 +163,7 @@ def create_app(
             "a single jwks_cache serves one accepted issuer; pass a dict keyed "
             f"by issuer for the {len(issuers)} configured"
         )
+    access_log.configure()
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
@@ -218,6 +236,14 @@ def create_app(
         principal: Principal = Depends(_authorize),
     ):
         if service_name not in principal.allowed_services:
+            access_log.record(
+                request,
+                "rejected",
+                reason="service_not_allowed",
+                subject=request.state.subject,
+                principal=principal.name,
+                service=service_name,
+            )
             raise HTTPException(
                 status_code=403, detail="service is not allowed for this agent"
             )

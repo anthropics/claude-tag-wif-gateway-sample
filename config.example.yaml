@@ -27,6 +27,19 @@ principals:
       principal: "registration-test-control"
       allowed_services: []
 
+# Optional: accept every agent in your organization without pinning
+# each agent's subject. The value is your organization's subject prefix,
+# wimse://identity.anthropic.com/org/<YOUR_ORG_ID>/agent/ (everything in
+# your agents' subjects up to and including "/agent/"; shown as "Subject
+# prefix" where you register the gateway). Exact subject pins above
+# still take precedence. The registration-test control agent is never
+# matched here, so its pinned entry above is still required. Uncomment
+# to enable; as shipped, this file has no organization mapping.
+# organization_principals:
+#     - subject_prefix: "wimse://identity.anthropic.com/org/org_0000000000000000000EXAMPLE/agent/"
+#       principal: "any-agent-in-my-organization"
+#       allowed_services: ["example-api"]
+
 # Mapping by the slack_channel_id claim instead of the subject; the
 # channel_id key below is the channel ID to match against that claim.
 # Any of your agents posting from this channel resolves to this
