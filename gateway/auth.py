@@ -8,7 +8,8 @@
 
 """Token validation for the Claude Tag sample gateway.
 
-Every check the documentation lists runs here. Signature against the
+Every token check the documentation lists runs here except the subject
+check, which is the mapping in mapping.py. Signature against the
 JWKS of the issuer the token names, exact issuer match against the
 accepted list, the registered audience, and expiry. Any failure produces
 a generic 401 so responses never leak which check failed or what the

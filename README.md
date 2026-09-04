@@ -3,9 +3,9 @@
 **Sample code. Not maintained and not accepting contributions.** This
 is a reference implementation of the gateway connection described in
 the Claude Tag documentation under Federated cloud access, "Connect a
-gateway". Federated cloud access is in public beta; an admin of your
-Claude organization connects gateways in Claude Tag admin settings, with
-no Anthropic involvement. This code is meant to be read, adapted, and
+gateway". Federated cloud access is in public beta; an organization
+Owner, or an admin with full Claude Tag management permission, connects
+gateways in Claude Tag admin settings, with no Anthropic involvement. This code is meant to be read, adapted, and
 reviewed against your own security requirements before any production
 use. It is not a supported product.
 
@@ -46,7 +46,7 @@ gateway/mapping.py     Config-file claims -> principal -> allowed services
 gateway/access_log.py  One JSON line per authorization decision, never the token
 gateway/main.py        App factory, / readiness, /list-services, /services/{name}/{path} proxy
 config.example.yaml    Example mapping config with deliberately fake IDs, plus the
-                       reserved registration-test control subject
+                       reserved connection-check control subject
 tests/                 Offline test harness with locally generated throwaway keys
 ```
 
@@ -81,14 +81,15 @@ trailing slash, for example `https://gateway.example.com`. The console
 accepts nothing else when you connect the gateway, and it is the exact
 value every token's `aud` claim will carry. Put it in `config.yaml`
 under `audience`. You register it yourself in Step 4; the console then
-runs the registration test described under "The readiness route and
-the registration test" below, unless you skip it with a recorded
-reason.
+runs the connection check described under "The readiness route and
+the connection check" below, unless you skip it with a recorded
+reason. The console accepts only that address form whether or not you
+skip the check.
 
 ### Step 2 — Validate tokens at your endpoint
 
-`gateway/auth.py` and `gateway/jwks.py` implement the four checks the
-documentation requires:
+`gateway/auth.py` and `gateway/jwks.py` implement four of the five
+checks the documentation lists; the fifth, the subject check, is Step 3:
 
 - **Signature** — keys are fetched from the `jwks_uri` named in the
   discovery document at `<issuer>/.well-known/openid-configuration`,
@@ -104,11 +105,12 @@ documentation requires:
   is a JSON array with one element, which is standard JWT; the code uses
   the library's audience check rather than comparing raw claim text, as
   the documentation recommends.
-- **Expiry** — tokens live 10 minutes; no leeway is granted.
+- **Expiry** — tokens live 10 minutes. The documentation allows up to
+  60 seconds of clock skew; this sample grants none (`leeway=0` in
+  `gateway/auth.py`), so keep the gateway's clock synchronized.
 
 The test suite (`tests/`) makes the documentation's verification list
-runnable: it
-mints tokens with locally generated throwaway keys and verifies the
+runnable: it mints tokens with locally generated throwaway keys and verifies the
 gateway rejects wrong-audience, bad-signature, and expired tokens (plus
 wrong issuer, `alg=none`, unknown key id, and missing claims) and
 accepts a valid token against a local JWKS. `tests/test_issuers.py`
@@ -152,10 +154,10 @@ The **Connect a gateway** dialog in Claude Tag admin settings shows your
 organization's **Subject prefix**,
 `wimse://identity.anthropic.com/org/<YOUR_ORG_ID>/agent/` (your
 organization ID is the `org_` segment), and the **Control subject** the
-registration test uses. The console does not list agent IDs (`cagt_`):
-this gateway's authorization log records the verified subject of every
-request, including requests it rejects as unmapped, so you can read an
-agent's full subject there after its first call. Check the subject in
+connection check uses. The console does not list agent IDs (`cagt_`):
+this gateway's authorization log records the subject of every request
+whose token verified, including requests it rejects as unmapped, so you
+can read an agent's full subject there after its first call. Check the subject in
 this order:
 
 1. **Pin the exact agent subjects** when your use case allows it. This
@@ -192,11 +194,11 @@ organization ID can never match another that merely starts with the
 same characters. Exact pins take precedence over the organization entry,
 so a pinned agent keeps its own services; the organization entry in turn
 takes precedence over `channel_principals`. The reserved
-registration-test control agent is never matched by an organization
-entry, so it cannot inherit your organization's services; keep its exact
-pin. A token for an agent in any other organization does not match the
-prefix and is rejected with 403, which is what the registration test's
-wrong-subject probe checks.
+control agent of the connection check is never matched by an
+organization entry, so it cannot inherit your organization's services;
+keep its exact pin. A token for an agent in any other organization does
+not match the prefix and is rejected with 403, which is what the
+connection check's wrong-subject probe verifies.
 
 **Channel lifecycle caveat:** an agent's identity is tied to its
 channel. Deleting and recreating a channel — even with the same name —
@@ -208,30 +210,44 @@ mapping keeps working across recreation.
 
 ### Step 4 — Connect the gateway in the console and verify end to end
 
-In Claude Tag admin settings, open **Federated cloud access**, click
-**Connect a gateway**, enter the audience URL from Step 1, confirm that
-your gateway checks each token's subject, and run the connection check:
-it sends the two probe requests described under "The readiness route
-and the registration test" below, and both must get the expected
-answer. Then add the gateway to an Access bundle attached to the scope
-of the channels that should use it. Anthropic does not review your
-configuration; the connection check and your own verification are the
-safeguards. Finally, trigger a test action from an agent's channel and
-check the gateway's logs — token accepted, subject mapped to the
-expected principal — and that a token with a different audience is
-rejected.
+In Claude Tag admin settings (`claude.ai/admin-settings/claude-tag`),
+open **Federated cloud access** and, in the **Gateways** section, click
+**Connect a gateway**. Enter the address from Step 1 in **Gateway
+address**, select the **This gateway checks that each token's subject
+belongs to your organization** checkbox, and click **Run check and
+connect**. Select that checkbox only if the gateway rejects every
+subject outside your organization: this sample does so through
+`principals` and `organization_principals`, so remove any
+`channel_principals` entry first, because that mapping accepts a
+matching channel ID from any organization. The check sends the two
+probe requests described under "The readiness route and the connection
+check" below, and both must get the expected answer.
+
+Then add the gateway to an Access bundle attached to the scope of the
+channels that should use it, and name the gateway in that scope's custom
+instructions so Claude knows it exists, for example: "Internal APIs are
+behind https://gateway.example.com. Call GET /list-services there to see
+what is available." Anthropic does not review your configuration; the
+connection check and your own verification are the safeguards.
+
+To verify, start a new thread in a channel under that scope and ask
+"@Claude call GET /list-services on https://gateway.example.com and
+tell me what it returns", then confirm the authorization log shows an
+accepted token whose subject mapped to the expected principal. Rejection
+of wrong audiences, issuers, signatures and expired tokens is what the
+test suite covers.
 
 ## The discovery route
 
 Your gateway is most useful when the model can learn what it wraps and
 how to use it. One useful pattern, served by this sample, is
 `GET /list-services`, returning the services the calling agent's
-principal may use. Mention the route in the identity profile's system
-prompt addendum (for example, "call GET /list-services to see what's
-available") so the agent reads it at runtime. An OpenAPI spec is an
+principal may use. Name the gateway and the route in the custom
+instructions of the scope whose bundle holds the gateway (Step 4 shows
+an example line) so the agent reads it at runtime. An OpenAPI spec is an
 equally valid shape.
 
-## The readiness route and the registration test
+## The readiness route and the connection check
 
 `GET /` and `POST /` run the same token validation and principal mapping
 as every other route and return `{"ok": true}` for a mapped agent, 403
@@ -241,31 +257,33 @@ ignored and nothing is forwarded. It reveals nothing a caller cannot
 already learn from `GET /list-services`. It is not an unauthenticated
 health check: a probe without a token gets 401.
 
-The Claude Tag self-serve registration test posts to the audience URL
-with an empty body twice: once with a token for a control agent in your
-organization, which must get 2xx, and once with a token whose subject
-names another organization, which must get 401 or 403. This route is
-what answers it, but two configuration points are also required:
+The console's connection check (the code calls it the registration
+test) posts to the gateway address with an empty body twice: once with a
+token for a control agent in your organization, which must get 2xx, and
+once with a token whose subject names another organization, which must
+get 401 or 403. This route is what answers it, but two configuration
+points are also required:
 
-- Register the gateway's https root URL, with no path or query string,
-  as the audience; the test sends its requests to the audience value
-  itself. With an audience that is not an https root URL, registration
-  fails unless you explicitly set the test to skip, and then no test
-  runs.
+- The audience is the gateway's https root URL, with no path or query
+  string; the check sends its requests to that address itself. The
+  console accepts only that address form, whether or not you skip the
+  check; skipping is for a gateway not yet reachable from the internet,
+  and then no check runs.
 - Add a `principals` entry for the control subject, with
   `allowed_services: []`, so the control token maps to a principal
-  without reaching any service. If the registration response includes a
-  control subject, use that value. If it does not include one yet, the
-  control token is minted for a reserved test agent, so the subject is
-  `wimse://identity.anthropic.com/org/<YOUR_ORG_ID>/agent/cagt_01YcVfxkQb6JRzqk5kF2tNLh`
-  (the same organization ID as your other subjects). Without this entry
-  the control gets 403 and the test reports that the gateway rejects
-  everything. An `organization_principals` entry never matches the
-  reserved control agent, so this exact pin is still required when you
-  use one.
+  without reaching any service. Use the **Control subject** shown in the
+  **Connect a gateway** dialog: a reserved test agent, the same in every
+  organization, under your organization's prefix,
+  `wimse://identity.anthropic.com/org/<YOUR_ORG_ID>/agent/cagt_01YcVfxkQb6JRzqk5kF2tNLh`.
+  The example config carries it with a placeholder organization ID, so
+  replace that ID with yours. Without this entry the control token gets
+  403 and the check reports that the gateway rejects everything. An
+  `organization_principals` entry never matches the reserved control
+  agent, so this exact pin is still required when you use one.
 
-Passing this test does not enable the connection by itself; Anthropic
-still enables it after the review in Step 4.
+Passing the check registers the gateway; Claude uses it once it is in an
+Access bundle attached to a channel's scope and that scope's custom
+instructions name its address (Step 4).
 
 ## Authorization log
 

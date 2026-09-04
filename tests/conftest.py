@@ -11,8 +11,7 @@
 The harness generates throwaway ES256 keys locally and serves them from
 a mocked JWKS endpoint, so every verify step from the documentation
 can be exercised with no network access and no dependency on Anthropic
-infrastructure. This mirrors the documentation's suggestion to mint test tokens
-with a throwaway key of your own.
+infrastructure.
 """
 
 import base64

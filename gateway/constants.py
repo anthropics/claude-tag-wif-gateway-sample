@@ -36,7 +36,8 @@ AGENT_SUBJECT_PREFIX = "wimse://"
 ORGANIZATION_SUBJECT_PREFIX = AGENT_SUBJECT_PREFIX + "identity.anthropic.com/org/"
 AGENT_PATH_SEGMENT = "/agent/"
 
-# The reserved agent id the registration test mints its control token
-# for, the same in every organization. It is authorized only through an
+# The reserved agent id the console's connection check (called the
+# registration test in this code) mints its control token for, the same
+# in every organization. It is authorized only through an
 # exact subject pin, never through an organization prefix.
 REGISTRATION_TEST_AGENT_ID = "cagt_01YcVfxkQb6JRzqk5kF2tNLh"

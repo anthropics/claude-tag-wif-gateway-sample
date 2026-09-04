@@ -1,7 +1,7 @@
 [project]
 name = "claude-tag-gateway-sample"
 version = "0.0.0"
-description = "Claude Tag identity federation private beta sample gateway. Not a published package."
+description = "Claude Tag identity federation public beta sample gateway. Not a published package."
 # Sample code, not a published package: the classifier makes packaging
 # tools refuse to upload this to any package index.
 classifiers = ["Private :: Do Not Upload"]

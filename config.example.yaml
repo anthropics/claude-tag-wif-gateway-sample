@@ -2,13 +2,13 @@
 # Example configuration for the Claude Tag sample gateway.
 # Copy this file to config.yaml and replace every value with your own.
 # The IDs below are deliberately implausible placeholders, except the
-# reserved registration-test control agent, which is the same for every
+# reserved connection-check control agent, which is the same for every
 # organization. Your organization ID is the org_ segment of the Subject
 # prefix shown in the Connect a gateway dialog; an agent's ID appears in
 # this gateway's authorization log after the agent's first request.
 
-# The audience value you registered. The registration test requires it
-# to be the gateway's https root URL, with no path or query string.
+# The gateway address you connect in the console. The console requires
+# it to be the gateway's https root URL, with no path or query string.
 audience: "https://gateway.example.com"
 
 # The accepted token issuers are not set in this file. The gateway
@@ -22,7 +22,7 @@ principals:
     - subject: "wimse://identity.anthropic.com/org/org_0000000000000000000EXAMPLE/agent/cagt_0000000000000000000EXAMPLE"
       principal: "example-agent"
       allowed_services: ["example-api"]
-    # The registration test's control token is minted for a reserved
+    # The connection check's control token is minted for a reserved
     # test agent; this entry lets it map without reaching any service.
     - subject: "wimse://identity.anthropic.com/org/org_0000000000000000000EXAMPLE/agent/cagt_01YcVfxkQb6JRzqk5kF2tNLh"
       principal: "registration-test-control"
@@ -33,7 +33,7 @@ principals:
 # wimse://identity.anthropic.com/org/<YOUR_ORG_ID>/agent/ (everything in
 # your agents' subjects up to and including "/agent/"; shown as "Subject
 # prefix" where you register the gateway). Exact subject pins above
-# still take precedence. The registration-test control agent is never
+# still take precedence. The connection-check control agent is never
 # matched here, so its pinned entry above is still required. Uncomment
 # to enable; as shipped, this file has no organization mapping.
 # organization_principals:
