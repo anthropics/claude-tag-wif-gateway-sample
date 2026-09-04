@@ -30,7 +30,7 @@ from gateway.main import create_app
 
 TEST_AUDIENCE = "test-gateway-audience"
 TEST_KID = "test-key-1"
-TEST_JWKS_URL = "https://identity.anthropic.com/claude-tag/test-jwks"
+TEST_JWKS_URL = "https://identity.anthropic.com/agents/test-jwks"
 TEST_UPSTREAM = "https://api.example.test"
 TEST_CREDENTIAL = "test-downstream-credential"
 

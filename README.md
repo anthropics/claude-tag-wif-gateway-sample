@@ -87,11 +87,11 @@ checks:
 
 - **Signature** — keys are fetched from the `jwks_uri` named in the
   discovery document at
-  `https://identity.anthropic.com/claude-tag/.well-known/openid-configuration`.
+  `https://identity.anthropic.com/agents/.well-known/openid-configuration`.
   Only ES256 is accepted. On an unknown key id the key cache refreshes
   once before rejecting, which absorbs key rotation (this is the guide's
   troubleshooting advice, implemented).
-- **Issuer** — exactly `https://identity.anthropic.com/claude-tag`.
+- **Issuer** — exactly `https://identity.anthropic.com/agents`.
 - **Audience** — the value you registered. On the wire the audience claim
   is a JSON array with one element, which is standard JWT; the code uses
   the library's audience check rather than comparing raw claim text, as

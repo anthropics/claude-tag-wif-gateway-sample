@@ -9,7 +9,7 @@
 """Shared constants for the Claude Tag sample gateway."""
 
 # Tokens whose iss claim differs from this exact value are rejected.
-CLAUDE_TAG_ISSUER = "https://identity.anthropic.com/claude-tag"
+CLAUDE_TAG_ISSUER = "https://identity.anthropic.com/agents"
 
 # The gateway reads the jwks_uri field from this discovery document and
 # fetches the signing keys it names.
