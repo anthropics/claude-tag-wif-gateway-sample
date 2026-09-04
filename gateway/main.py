@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Claude Tag identity federation private beta sample code.
+# Claude Tag identity federation public beta sample code.
 # This is a reference implementation, not a production service.
 # Review it against your own security requirements before any
 # production use.
@@ -35,8 +35,9 @@ from urllib.parse import quote, unquote
 import httpx
 from fastapi import Depends, FastAPI, HTTPException, Request, Response
 
-from gateway.auth import verify_request
-from gateway.constants import OIDC_DISCOVERY_URL
+from gateway import access_log
+from gateway.auth import accepted_issuers, verify_request
+from gateway.constants import OIDC_DISCOVERY_PATH
 from gateway.jwks import JWKSCache
 from gateway.mapping import AccessConfig, Principal
 
@@ -117,25 +118,52 @@ def sanitize_downstream_path(downstream_path: str) -> str | None:
 
 
 async def _authorize(request: Request) -> Principal:
-    claims = await verify_request(request)
+    try:
+        claims = await verify_request(request)
+    except HTTPException as error:
+        # An unverified token's claims cannot be trusted, so none of them
+        # are logged.
+        reason = (
+            "verification_unavailable" if error.status_code == 503 else "invalid_token"
+        )
+        access_log.record(request, "rejected", reason=reason)
+        raise
     principal = request.app.state.config.resolve_principal(claims)
     if principal is None:
         # The token is genuine but this agent has no mapping, so the
         # request is forbidden rather than unauthorized.
+        access_log.record(
+            request, "rejected", reason="unmapped_subject", subject=claims["sub"]
+        )
         raise HTTPException(
             status_code=403, detail="agent is not mapped to a principal"
         )
+    access_log.record(
+        request, "accepted", subject=claims["sub"], principal=principal.name
+    )
+    request.state.subject = claims["sub"]
     return principal
 
 
 def create_app(
     config_path: str | None = None,
     http_client: httpx.AsyncClient | None = None,
-    jwks_cache: JWKSCache | None = None,
+    jwks_cache: JWKSCache | dict[str, JWKSCache] | None = None,
 ) -> FastAPI:
     config = AccessConfig.load(
         config_path or os.environ.get("GATEWAY_CONFIG", "config.yaml")
     )
+    issuers = () if isinstance(jwks_cache, dict) else accepted_issuers()
+    if (
+        jwks_cache is not None
+        and not isinstance(jwks_cache, dict)
+        and len(issuers) != 1
+    ):
+        raise ValueError(
+            "a single jwks_cache serves one accepted issuer; pass a dict keyed "
+            f"by issuer for the {len(issuers)} configured"
+        )
+    access_log.configure()
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
@@ -151,9 +179,18 @@ def create_app(
         # injected client is covered too.
         client.cookies = _DropCookieJar()
         app.state.http_client = client
-        app.state.jwks = jwks_cache or JWKSCache(
-            app.state.http_client, OIDC_DISCOVERY_URL
-        )
+        # One key cache per accepted issuer, keyed by the exact issuer
+        # string. The keys of this dict are the accepted issuer list:
+        # gateway.auth looks a token's iss claim up here and nowhere else.
+        if isinstance(jwks_cache, dict):
+            app.state.jwks = jwks_cache
+        elif jwks_cache is not None:
+            app.state.jwks = {issuers[0]: jwks_cache}
+        else:
+            app.state.jwks = {
+                issuer: JWKSCache(app.state.http_client, issuer + OIDC_DISCOVERY_PATH)
+                for issuer in issuers
+            }
         try:
             yield
         finally:
@@ -199,6 +236,14 @@ def create_app(
         principal: Principal = Depends(_authorize),
     ):
         if service_name not in principal.allowed_services:
+            access_log.record(
+                request,
+                "rejected",
+                reason="service_not_allowed",
+                subject=request.state.subject,
+                principal=principal.name,
+                service=service_name,
+            )
             raise HTTPException(
                 status_code=403, detail="service is not allowed for this agent"
             )

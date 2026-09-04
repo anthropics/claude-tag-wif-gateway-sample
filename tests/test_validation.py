@@ -1,14 +1,14 @@
 # Copyright 2026 Anthropic PBC
 # SPDX-License-Identifier: Apache-2.0
 
-# Claude Tag identity federation private beta sample code.
+# Claude Tag identity federation public beta sample code.
 # This is a reference implementation, not a production service.
 # Review it against your own security requirements before any
 # production use.
 
-"""Token validation tests mirroring the onboarding guide's verify list.
+"""Token validation tests mirroring the documentation's verify list.
 
-The guide says to verify that the endpoint rejects a token with a wrong
+The documentation says to verify that the endpoint rejects a token with a wrong
 audience, a bad signature, or an expired timestamp, and accepts a valid
 token against a local JWKS. Each case below is one of those checks plus
 the adjacent failure modes a validator must also close.
@@ -100,6 +100,18 @@ def test_refresh_on_unknown_kid_absorbs_rotation(harness):
 
 def test_rejects_garbage_token(harness):
     assert harness.get("/list-services", token="not.a.jwt").status_code == 401
+
+
+def test_rejects_deeply_nested_header_and_payload(harness):
+    import base64
+
+    def segment(raw: bytes) -> str:
+        return base64.urlsafe_b64encode(raw).rstrip(b"=").decode()
+
+    nested = segment(b"[" * 100_000)
+    header = segment(b'{"alg":"ES256","kid":"' + TEST_KID.encode() + b'"}')
+    for token in (f"{nested}.{header}.sig", f"{header}.{nested}.sig"):
+        assert harness.get("/list-services", token=token).status_code == 401
 
 
 def test_rejects_missing_subject(harness):

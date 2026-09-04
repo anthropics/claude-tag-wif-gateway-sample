@@ -1,14 +1,14 @@
 # Copyright 2026 Anthropic PBC
 # SPDX-License-Identifier: Apache-2.0
 
-# Claude Tag identity federation private beta sample code.
+# Claude Tag identity federation public beta sample code.
 # This is a reference implementation, not a production service.
 # Review it against your own security requirements before any
 # production use.
 
 """OIDC discovery and JWKS caching for the Claude Tag sample gateway.
 
-The gateway resolves signing keys the way the onboarding guide describes.
+The gateway resolves signing keys the way the documentation describes.
 It fetches the discovery document, follows the jwks_uri field, and caches
 the returned keys. When a token names a key id that is not in the cache,
 the cache refreshes once before rejecting, which is how key rotation is
