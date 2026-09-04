@@ -20,7 +20,7 @@ token. This gateway:
    expiry. Anything that fails is rejected with a generic 401.
 2. **Maps** the verified claims to a principal in your system, from a
    config file — exact-match on the token subject (preferred), with a
-   `channel_id`-based mapping shown as an alternative.
+   `slack_channel_id`-based mapping shown as an alternative.
 3. **Serves a discovery route** (`GET /list-services`) so the agent can
    learn at runtime what this gateway offers — one useful pattern for
    making a gateway discoverable to the model.
@@ -110,10 +110,13 @@ The token subject identifies one agent:
 `wimse://identity.anthropic.com/org/<YOUR_ORG_ID>/agent/<AGENT_ID>`.
 Your Anthropic contact provides your organization ID (starts with
 `org_`) and each agent's ID (starts with `cagt_`). Put exact-match
-entries in `config.yaml` under `principals`. A `channel_id`-keyed
-mapping is shown under `channel_principals` — a custom endpoint can
-authorize on any claim because it verifies the full token itself, but a
-channel mapping is broader than a subject pin, so prefer subject pins.
+entries in `config.yaml` under `principals`. A mapping keyed on the
+token's `slack_channel_id` claim is shown under `channel_principals` — a
+custom endpoint can authorize on any claim because it verifies the full
+token itself, but a channel mapping is broader than a subject pin, so
+prefer subject pins. The claim is present only when Claude is acting in
+one Slack channel; a token for a workspace-wide request has none, and
+that token matches no `channel_principals` entry.
 
 **Channel lifecycle caveat (from the guide):** an agent's identity is
 tied to its channel. Deleting and recreating a channel — even with the

@@ -9,10 +9,10 @@
 """Claims to principal mapping for the Claude Tag sample gateway.
 
 The mapping lives in a YAML config file. Exact match on the full token
-subject is preferred, as the onboarding guide recommends. A channel_id
-based mapping is included as an example of authorizing on a claim other
-than the subject, which a custom endpoint can do because it verifies the
-full token itself.
+subject is preferred, as the onboarding guide recommends. A mapping
+keyed on the slack_channel_id claim is included as an example of
+authorizing on a claim other than the subject, which a custom endpoint
+can do because it verifies the full token itself.
 """
 
 from dataclasses import dataclass, field
@@ -90,7 +90,7 @@ class AccessConfig:
         subject_match = self.subject_principals.get(claims.get("sub"))
         if subject_match is not None:
             return subject_match
-        channel_id = claims.get("channel_id")
+        channel_id = claims.get("slack_channel_id")
         if isinstance(channel_id, str):
             return self.channel_principals.get(channel_id)
         return None

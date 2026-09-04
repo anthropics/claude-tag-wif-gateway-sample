@@ -22,9 +22,11 @@ principals:
       principal: "registration-test-control"
       allowed_services: []
 
-# Mapping by the channel_id claim instead of the subject. Any of your
-# agents posting from this channel resolves to this principal, which is
-# broader than a subject pin. Prefer subject pins unless you need this.
+# Mapping by the slack_channel_id claim instead of the subject; the
+# channel_id key below is the channel ID to match against that claim.
+# Any of your agents posting from this channel resolves to this
+# principal, which is broader than a subject pin. Prefer subject pins
+# unless you need this.
 channel_principals:
     - channel_id: "C0123456789"
       principal: "support-channel-agent"

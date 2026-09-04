@@ -17,7 +17,7 @@ def test_unmapped_subject_is_forbidden(harness):
 
 
 def test_channel_claim_maps_unmapped_subject(harness):
-    token = harness.mint(sub=UNMAPPED_SUBJECT, channel_id=MAPPED_CHANNEL)
+    token = harness.mint(sub=UNMAPPED_SUBJECT, slack_channel_id=MAPPED_CHANNEL)
     response = harness.get("/list-services", token=token)
     assert response.status_code == 200
     names = [service["name"] for service in response.json()["services"]]
@@ -25,10 +25,15 @@ def test_channel_claim_maps_unmapped_subject(harness):
 
 
 def test_unmapped_channel_is_forbidden(harness):
-    token = harness.mint(sub=UNMAPPED_SUBJECT, channel_id="C0000000000")
+    token = harness.mint(sub=UNMAPPED_SUBJECT, slack_channel_id="C0000000000")
+    assert harness.get("/list-services", token=token).status_code == 403
+
+
+def test_former_channel_id_claim_name_does_not_map(harness):
+    token = harness.mint(sub=UNMAPPED_SUBJECT, channel_id=MAPPED_CHANNEL)
     assert harness.get("/list-services", token=token).status_code == 403
 
 
 def test_exact_subject_match_wins_over_channel(harness):
-    token = harness.mint(channel_id="C0000000000")
+    token = harness.mint(slack_channel_id="C0000000000")
     assert harness.get("/list-services", token=token).status_code == 200
