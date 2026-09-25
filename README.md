@@ -123,14 +123,9 @@ runs offline.
 
 By default the gateway accepts tokens from
 `https://identity.anthropic.com/agents` only. To accept a different
-issuer, set `CLAUDE_TAG_ISSUER`. To accept several, set
-`CLAUDE_TAG_ISSUERS` to a comma-separated list; it takes precedence
-over the singular variable:
-
-```bash
-CLAUDE_TAG_ISSUERS="https://identity.anthropic.com/claude-tag,https://identity.anthropic.com/agents" \
-  .venv/bin/python -m uvicorn gateway.main:create_app --factory --port 8000
-```
+issuer, set the environment variable `CLAUDE_TAG_ISSUER`. To accept
+several, set `CLAUDE_TAG_ISSUERS` to a comma-separated list of every
+issuer to accept; it takes precedence over the singular variable.
 
 Every entry must be an https URL with no trailing slash, and a token's
 `iss` claim must equal an entry exactly. The gateway keeps a separate
@@ -138,13 +133,12 @@ key set per issuer, fetched from that issuer's own discovery document,
 and refuses to start on a malformed list. With Docker, pass the variable
 with `-e CLAUDE_TAG_ISSUERS=...` on the `docker run` line.
 
-**Issuer transition.** Claude Tag tokens moved from
-`https://identity.anthropic.com/claude-tag` to
-`https://identity.anthropic.com/agents` on September 4, 2026, and the
-previous issuer's keys remain published for a transition period. If
-your gateway may still receive tokens from the previous issuer, list
-both as above. Once it no longer does, unset the variable so that only
-`https://identity.anthropic.com/agents` is accepted.
+**Retired issuer.** Claude Tag tokens used to come from
+`https://identity.anthropic.com/claude-tag`. That issuer is retired:
+its discovery document and signing keys are no longer published.
+Tokens from the current issuer are not affected. If you added the
+retired issuer to `CLAUDE_TAG_ISSUERS` or `CLAUDE_TAG_ISSUER`, remove
+it and restart the gateway.
 
 ### Step 3 — Map subjects to principals
 
