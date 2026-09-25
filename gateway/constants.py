@@ -21,6 +21,11 @@ OIDC_DISCOVERY_PATH = "/.well-known/openid-configuration"
 # single key cache themselves.
 OIDC_DISCOVERY_URL = CLAUDE_TAG_ISSUER + OIDC_DISCOVERY_PATH
 
+# How long an issuer's fetched signing keys stay trusted after the
+# last successful fetch. Past this the gateway answers 503 for that
+# issuer's tokens until a fetch succeeds.
+MAX_KEY_AGE_SECONDS = 3600.0
+
 # Claude Tag tokens are signed with ES256. Accepting only this algorithm
 # prevents algorithm confusion attacks.
 ALLOWED_ALGORITHMS = ["ES256"]

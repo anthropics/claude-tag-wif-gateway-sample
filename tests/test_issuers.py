@@ -23,7 +23,11 @@ import pytest
 from fastapi.testclient import TestClient
 
 from gateway.auth import accepted_issuers
-from gateway.constants import CLAUDE_TAG_ISSUER, OIDC_DISCOVERY_PATH
+from gateway.constants import (
+    CLAUDE_TAG_ISSUER,
+    MAX_KEY_AGE_SECONDS,
+    OIDC_DISCOVERY_PATH,
+)
 from gateway.jwks import JWKSCache
 from gateway.main import create_app
 from tests.conftest import TEST_CONFIG, GatewayHarness, make_es256_key, public_jwk
@@ -206,6 +210,32 @@ def test_unreachable_issuer_fails_closed_for_its_own_tokens_only(build_gateway):
     )
     assert gateway.get("/", gateway.mint_for(NEW_ISSUER)).status_code == 200
     assert gateway.get("/", gateway.mint_for(OLD_ISSUER)).status_code == 503
+
+
+def test_issuer_past_the_key_age_limit_fails_closed_for_its_own_tokens_only(
+    build_gateway, clock
+):
+    old = Issuer(OLD_ISSUER)
+    gateway = build_gateway(
+        f"{OLD_ISSUER},{NEW_ISSUER}", old, Issuer(NEW_ISSUER), Issuer(OTHER_ISSUER)
+    )
+    empty_cache_retry_interval = 1.0
+    fetched_at = clock.now
+    assert gateway.get("/", gateway.mint_for(OLD_ISSUER)).status_code == 200
+    assert gateway.get("/", gateway.mint_for(NEW_ISSUER)).status_code == 200
+
+    old.reachable = False
+    clock.now = fetched_at + MAX_KEY_AGE_SECONDS - empty_cache_retry_interval
+    assert gateway.get("/", gateway.mint_for(OLD_ISSUER)).status_code == 200
+
+    clock.now = fetched_at + MAX_KEY_AGE_SECONDS
+    assert gateway.get("/", gateway.mint_for(OLD_ISSUER)).status_code == 503
+    assert gateway.get("/", gateway.mint_for(NEW_ISSUER)).status_code == 200
+    assert gateway.get("/", gateway.mint_for(OTHER_ISSUER)).status_code == 401
+
+    old.reachable = True
+    clock.now += empty_cache_retry_interval
+    assert gateway.get("/", gateway.mint_for(OLD_ISSUER)).status_code == 200
 
 
 def test_single_injected_cache_serves_the_one_accepted_issuer(tmp_path, monkeypatch):
