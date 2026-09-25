@@ -39,7 +39,7 @@ token. This gateway:
 ## Layout
 
 ```
-gateway/constants.py   Default issuer URL, discovery path, algorithm allowlist, subject prefixes, control agent id
+gateway/constants.py   Default issuer URL, discovery path, key age limit, algorithm allowlist, subject prefixes, control agent id
 gateway/jwks.py        OIDC discovery -> jwks_uri -> key cache, refresh on unknown kid
 gateway/auth.py        Accepted issuer list, bearer extraction, the four verify checks
 gateway/mapping.py     Config-file claims -> principal -> allowed services
@@ -313,6 +313,14 @@ logger set to INFO.
   claim, which must exactly equal an accepted issuer; a token naming any
   other issuer is rejected before key lookup, and a token is never
   checked against another issuer's keys.
+- An issuer's fetched signing keys are trusted for at most one hour
+  after the last successful fetch (the key age limit,
+  `MAX_KEY_AGE_SECONDS` in `gateway/constants.py`). After that the
+  gateway answers 503 for that issuer's tokens until a fetch succeeds, so
+  an issuer outage cannot keep a withdrawn key accepted indefinitely.
+  The gateway fetches only when a request arrives, so one that has been
+  idle for longer than the limit refetches on its next request and
+  answers 503 if that fetch fails.
 - Error responses are generic and never echo token contents, and the
   authorization log records subjects only from tokens that verified.
 - FastAPI's interactive documentation and OpenAPI routes (`/docs`,
@@ -362,17 +370,20 @@ your own requirements before any production use:
 - The key-set URL named by the issuer's discovery document is fetched
   wherever it points (any HTTPS host); it is not pinned to the
   issuer's own host.
-- An issuer that empties its published key set is not honored until
-  the gateway restarts; previously fetched keys keep verifying tokens
-  until then.
+- An issuer emptying its published key set does not take effect at
+  once: previously fetched keys keep verifying tokens until they reach
+  the key age limit above, and then that issuer's tokens get 503 until
+  it publishes a usable key.
 
 ## Before production
 
 At minimum: terminate TLS in front of the gateway, add rate limiting, ship
-the authorization log somewhere you can search it, cap
-how long previously fetched signing keys may keep being served when JWKS
-refreshes fail repeatedly (this sample serves its last good key set
-until a refresh succeeds), pin your container base image by digest, consider hash-pinned dependency
+the authorization log somewhere you can search it, set the key age limit
+(`MAX_KEY_AGE_SECONDS` in `gateway/constants.py`) to suit your own risk
+(a shorter limit cuts how long a withdrawn key stays accepted while the
+issuer cannot be reached; a longer one keeps the gateway answering
+through a longer outage), pin your container base image by digest,
+consider hash-pinned dependency
 installs (`requirements.lock.txt` pins the full dependency tree with
 hashes: `pip install --require-hashes -r requirements.lock.txt`), and
 run your own security review. The subject prefix (`wimse://`) is the Workload

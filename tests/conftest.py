@@ -17,6 +17,7 @@ infrastructure.
 import base64
 import time
 from dataclasses import dataclass, field
+from types import SimpleNamespace
 
 import httpx
 import jwt
@@ -140,6 +141,15 @@ class GatewayHarness:
         if token is not None:
             request_headers["Authorization"] = f"Bearer {token}"
         return self.client.get(path, headers=request_headers)
+
+
+@pytest.fixture
+def clock(monkeypatch):
+    """Replaces the monotonic clock the key cache reads; set .now to move it."""
+    fake = SimpleNamespace(now=1000.0)
+    fake.monotonic = lambda: fake.now
+    monkeypatch.setattr("gateway.jwks.time", fake)
+    return fake
 
 
 @pytest.fixture
